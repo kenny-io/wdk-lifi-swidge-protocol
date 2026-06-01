@@ -370,16 +370,28 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
    */
   async _resolveToToken (fromToken, toToken, fromChainId, toChainId) {
     if (fromToken === toToken && fromChainId !== toChainId) {
-      return this._resolveTokenSymbol(fromChainId, fromToken)
+      const dest = await this._resolveCrossChainToToken(fromChainId, toChainId, fromToken)
+      return dest.address
     }
     return toToken
   }
 
   /**
-   * Resolves a token contract address to its symbol via the LI.FI token API.
+   * Finds the destination-chain token that matches a cross-chain bridge source token.
+   * LI.FI symbols are not always portable (e.g. Ethereum USDT → Arbitrum USDT0).
    * @private
    */
-  async _resolveTokenSymbol (chainId, tokenAddress) {
+  async _resolveCrossChainToToken (fromChainId, toChainId, fromTokenAddress) {
+    const source = await this._fetchTokenInfo(fromChainId, fromTokenAddress)
+    const dest = await this._findDestinationToken(toChainId, source)
+    return dest
+  }
+
+  /**
+   * Fetches token metadata from the LI.FI token API.
+   * @private
+   */
+  async _fetchTokenInfo (chainId, tokenAddress) {
     const params = new URLSearchParams({ chain: String(chainId), token: tokenAddress })
 
     const response = await fetch(`${LIFI_API_URL}/token?${params}`, {
@@ -388,22 +400,102 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
 
     if (!response.ok) {
       throw new LifiQuoteError(
-        `Failed to resolve token symbol for ${tokenAddress} on chain ${chainId} ` +
+        `Failed to resolve token for ${tokenAddress} on chain ${chainId} ` +
         `(${response.status} ${response.statusText}). ` +
-        `Pass an explicit 'toToken' to bypass symbol resolution.`
+        `Pass an explicit 'toToken' to bypass resolution.`
       )
     }
 
-    const { symbol } = await response.json()
+    const token = await response.json()
 
-    if (!symbol) {
+    if (!token?.symbol) {
       throw new LifiQuoteError(
         `LI.FI returned no symbol for token ${tokenAddress} on chain ${chainId}. ` +
-        `Pass an explicit 'toToken' to bypass symbol resolution.`
+        `Pass an explicit 'toToken' to bypass resolution.`
       )
     }
 
-    return symbol
+    return token
+  }
+
+  /**
+   * Searches the destination chain for a stablecoin with matching decimals.
+   * @private
+   */
+  async _findDestinationToken (toChainId, source) {
+    const searchTerms = [source.symbol]
+    if (source.coinKey && source.coinKey !== source.symbol) searchTerms.push(source.coinKey)
+    if (!searchTerms.includes(`${source.symbol}0`)) searchTerms.push(`${source.symbol}0`)
+
+    const byAddress = new Map()
+
+    for (const term of searchTerms) {
+      const tokens = await this._searchTokens(toChainId, term)
+      for (const token of tokens) {
+        if (!this._isDestinationTokenCandidate(token, source)) continue
+        const prev = byAddress.get(token.address)
+        if (!prev || this._scoreDestinationToken(token, source) > this._scoreDestinationToken(prev, source)) {
+          byAddress.set(token.address, token)
+        }
+      }
+    }
+
+    const matches = [...byAddress.values()]
+    if (matches.length === 0) {
+      throw new LifiQuoteError(
+        `No destination token found for ${source.symbol} on chain ${toChainId}. ` +
+        `Pass an explicit 'toToken' address or symbol.`
+      )
+    }
+
+    matches.sort((a, b) => this._scoreDestinationToken(b, source) - this._scoreDestinationToken(a, source))
+    return matches[0]
+  }
+
+  /**
+   * @param {object} token
+   * @param {object} source
+   * @private
+   */
+  _isDestinationTokenCandidate (token, source) {
+    if (token.decimals !== source.decimals) return false
+    if ((token.tags || []).includes('stablecoin')) return true
+    const price = Number.parseFloat(token.priceUSD)
+    return Number.isFinite(price) && price >= 0.95 && price <= 1.05
+  }
+
+  /**
+   * @param {object} token
+   * @param {object} source
+   * @private
+   */
+  _scoreDestinationToken (token, source) {
+    let score = (token.marketCapUSD || 0) + (token.relevance || 0)
+    if (token.coinKey === source.coinKey) score += 1e15
+    if (token.coinKey === `${source.coinKey}0` || token.symbol === `${source.symbol}0`) score += 1e14
+    return score
+  }
+
+  /** @private */
+  async _searchTokens (chainId, search) {
+    const params = new URLSearchParams({
+      chains: String(chainId),
+      search,
+      limit: '20'
+    })
+
+    const response = await fetch(`${LIFI_API_URL}/tokens?${params}`, {
+      headers: this._buildHeaders()
+    })
+
+    if (!response.ok) {
+      throw new LifiQuoteError(
+        `Failed to search tokens on chain ${chainId} (${response.status} ${response.statusText}).`
+      )
+    }
+
+    const data = await response.json()
+    return data.tokens?.[String(chainId)] ?? []
   }
 
   /** @private */

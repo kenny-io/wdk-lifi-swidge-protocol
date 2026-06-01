@@ -63,7 +63,7 @@ Fees are always returned as a populated `SwidgeFee[]` array. There is no aggrega
 
 `SwidgeCommonOptions` requires both `fromToken` and `toToken`. For a bridge-only operation the natural thing is to pass the same address for both, but token addresses differ per chain (USDT on Arbitrum is not the same contract as USDT on Optimism). Passing the source chain's address as `toToken` on a cross-chain route causes LI.FI to reject the quote.
 
-When `fromToken === toToken` and the chains differ, `_resolveToToken` calls the LI.FI `/token` endpoint to resolve the contract address to its symbol (`'USDT'`). Symbols are chain-agnostic — LI.FI accepts them as `toToken` and resolves the correct contract on the destination chain. The method throws on failure rather than falling back silently, because a silent fallback would reintroduce the exact bug it exists to prevent.
+When `fromToken === toToken` and the chains differ, `_resolveToToken` loads source token metadata from LI.FI, then searches the destination chain for a stablecoin with matching decimals (trying the source symbol, `coinKey`, and a `{symbol}0` variant). The highest-market-cap match is used as `toToken` (contract address). This handles rebranded destination tokens such as Ethereum USDT → Arbitrum USDT0, where passing the source symbol alone would fail. The method throws if no match is found rather than falling back silently.
 
 This also fires automatically when the base class `bridge()` delegation calls `swidge()`, since the base class passes `toToken = fromToken` for bridge-only routes.
 

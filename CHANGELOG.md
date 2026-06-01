@@ -6,6 +6,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-01
+
+### Fixed
+- `_resolveToToken` now performs a proper destination-chain token lookup instead of passing the source symbol directly. The old approach failed for tokens that are rebranded on the destination chain (e.g. Ethereum USDT → Arbitrum USDT0). Resolution now fetches source token metadata, searches the destination chain's token list, and selects the highest-market-cap stablecoin matching symbol, `coinKey`, or a `{symbol}0` variant.
+- All typed error classes now asserted by class (not message string) in the unit test suite.
+- `LifiQuoteError` was missing from test imports, causing four tests to pass vacuously.
+
+### Changed
+- Integration tests overhauled: split into three credential tiers, Tier 1 (discovery) runs against the live LI.FI API without any env vars, Tier 2 (quotes) runs against mainnet tokens without funds.
+- Status test updated: the all-zeros hash resolves to a real LI.FI transaction (HTTP 200); the test now uses a genuinely non-existent hash that returns 404.
+
 ## [0.1.1] — 2026-06-01
 
 ### Fixed

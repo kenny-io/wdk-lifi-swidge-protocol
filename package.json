@@ -1,6 +1,6 @@
 {
   "name": "@kenny_io/wdk-protocol-swidge-lifi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "WDK Swidge module for LI.FI — lets any WDK wallet account swap and bridge tokens via LI.FI using the ISwidgeProtocol interface.",
   "keywords": [
     "wdk",
@@ -36,7 +36,10 @@
     "lint:fix": "standard --fix",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --testPathIgnorePatterns=tests/integration",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage --testPathIgnorePatterns=tests/integration",
-    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --testTimeout=120000"
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --testTimeout=120000",
+    "example:discover": "node examples/discover-chains-and-tokens.js",
+    "example:swap": "node -r dotenv/config examples/swap-usdt-to-usdc.js",
+    "example:bridge": "node -r dotenv/config examples/bridge-usdt.js"
   },
   "dependencies": {
     "@tetherto/wdk-wallet": "1.0.0-beta.9",
@@ -56,6 +59,7 @@
     "@tetherto/wdk-wallet-evm": "1.0.0-beta.8",
     "@tetherto/wdk-wallet-evm-erc-4337": "1.0.0-beta.5",
     "cross-env": "10.0.0",
+    "dotenv": "^16.4.7",
     "jest": "30.0.5",
     "standard": "17.1.2"
   },

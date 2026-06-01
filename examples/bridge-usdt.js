@@ -25,6 +25,8 @@ import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
 import { LifiSwidgeProtocol } from '@kenny_io/wdk-protocol-swidge-lifi'
 
 const USDT_ETHEREUM = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+// When fromToken === toToken cross-chain, the protocol resolves the destination
+// contract automatically (Ethereum USDT → Arbitrum USDT0).
 const AMOUNT = 10_000_000n // 10 USDT at 6 decimals
 
 const account = new WalletAccountEvm(process.env.SEED_PHRASE, "0'/0/0", {

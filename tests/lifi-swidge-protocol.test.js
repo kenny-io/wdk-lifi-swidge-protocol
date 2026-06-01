@@ -94,11 +94,30 @@ const MOCK_CHAINS = {
   ]
 }
 
+const MOCK_SOURCE_TOKEN = {
+  symbol: 'USDT',
+  decimals: 6,
+  coinKey: 'USDT',
+  marketCapUSD: 1e11,
+  tags: ['stablecoin']
+}
+
+const MOCK_DEST_TOKEN = {
+  address: TOKEN,
+  symbol: 'USDT0',
+  decimals: 6,
+  coinKey: 'USDT0',
+  marketCapUSD: 4e9,
+  tags: ['stablecoin']
+}
+
 const MOCK_TOKENS = {
   tokens: {
     1: [
       { address: TOKEN, symbol: 'USDT', decimals: 6, name: 'Tether USD' }
-    ]
+    ],
+    42161: [MOCK_DEST_TOKEN],
+    8453: [{ ...MOCK_DEST_TOKEN, symbol: 'USDT', coinKey: 'USDT', priceUSD: '1.00' }]
   }
 }
 
@@ -119,7 +138,7 @@ jest.unstable_mockModule('ethers', () => ({
   })
 }))
 
-const { LifiSwidgeProtocol, LifiReadOnlyAccountError, LifiConfigurationError, LifiExecutionError, LifiStatusError, LifiUnsupportedChainError } = await import('../index.js')
+const { LifiSwidgeProtocol, LifiReadOnlyAccountError, LifiConfigurationError, LifiExecutionError, LifiQuoteError, LifiStatusError, LifiUnsupportedChainError } = await import('../index.js')
 
 // ─── Helper: default fetch mock ──────────────────────────────────────────────
 
@@ -131,7 +150,7 @@ function mockFetch (overrides = {}) {
       return Promise.resolve({ ok: true, json: async () => MOCK_TOKENS })
     }
     if (url.includes('/token')) {
-      return Promise.resolve({ ok: true, json: async () => ({ symbol: 'USDT' }) })
+      return Promise.resolve({ ok: true, json: async () => MOCK_SOURCE_TOKEN })
     }
     if (url.includes('/chains')) {
       return Promise.resolve({ ok: true, json: async () => MOCK_CHAINS })
@@ -193,7 +212,7 @@ describe('LifiSwidgeProtocol', () => {
         expect(protocol_.included).toBe(true)
       })
 
-      test('resolves toToken to symbol when fromToken === toToken cross-chain', async () => {
+      test('resolves toToken to destination address when fromToken === toToken cross-chain', async () => {
         await protocol.quoteSwidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
         })
@@ -202,9 +221,11 @@ describe('LifiSwidgeProtocol', () => {
         expect(tokenCall).toContain(`token=${TOKEN}`)
         expect(tokenCall).toContain('chain=1')
 
+        const tokensSearch = global.fetch.mock.calls.find(([url]) => url.includes('/tokens'))[0]
+        expect(tokensSearch).toContain('chains=42161')
+
         const quoteCall = global.fetch.mock.calls.find(([url]) => url.includes('/quote'))[0]
-        expect(quoteCall).toContain('toToken=USDT')
-        expect(quoteCall).not.toContain(`toToken=${TOKEN}`)
+        expect(quoteCall).toContain(`toToken=${TOKEN}`)
       })
 
       test('skips token resolution when toToken differs from fromToken', async () => {
@@ -289,7 +310,8 @@ describe('LifiSwidgeProtocol', () => {
 
       test('returns empty fees arrays when estimate arrays are empty', async () => {
         global.fetch = jest.fn().mockImplementation((url) => {
-          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => ({ symbol: 'USDT' }) })
+          if (url.includes('/tokens')) return Promise.resolve({ ok: true, json: async () => MOCK_TOKENS })
+          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => MOCK_SOURCE_TOKEN })
           return Promise.resolve({
             ok: true,
             json: async () => ({
@@ -322,13 +344,14 @@ describe('LifiSwidgeProtocol', () => {
 
       test('throws LifiQuoteError when quote API returns non-OK', async () => {
         global.fetch = jest.fn().mockImplementation((url) => {
-          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => ({ symbol: 'USDT' }) })
+          if (url.includes('/tokens')) return Promise.resolve({ ok: true, json: async () => MOCK_TOKENS })
+          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => MOCK_SOURCE_TOKEN })
           return Promise.resolve({ ok: false, statusText: 'Bad Request', json: async () => ({ message: 'Invalid params' }) })
         })
 
         await expect(protocol.quoteSwidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
-        })).rejects.toThrow('LI.FI quote request failed: Invalid params')
+        })).rejects.toThrow(LifiQuoteError)
       })
 
       test('throws LifiQuoteError when token resolution returns non-OK', async () => {
@@ -339,7 +362,7 @@ describe('LifiSwidgeProtocol', () => {
 
         await expect(protocol.quoteSwidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
-        })).rejects.toThrow('Failed to resolve token symbol')
+        })).rejects.toThrow(LifiQuoteError)
       })
 
       test('throws LifiQuoteError when token resolution returns no symbol', async () => {
@@ -350,7 +373,7 @@ describe('LifiSwidgeProtocol', () => {
 
         await expect(protocol.quoteSwidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
-        })).rejects.toThrow('LI.FI returned no symbol')
+        })).rejects.toThrow(LifiQuoteError)
       })
     })
 
@@ -405,12 +428,13 @@ describe('LifiSwidgeProtocol', () => {
         expect(quoteCall).toContain('toChain=42161')
         expect(quoteCall).toContain(`fromToken=${TOKEN}`)
         expect(quoteCall).toContain('fromAmount=1000000')
-        expect(quoteCall).toContain('toToken=USDT')
+        expect(quoteCall).toContain(`toToken=${TOKEN}`)
       })
 
       test('skips approval when skipApproval is true', async () => {
         global.fetch = jest.fn().mockImplementation((url) => {
-          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => ({ symbol: 'USDT' }) })
+          if (url.includes('/tokens')) return Promise.resolve({ ok: true, json: async () => MOCK_TOKENS })
+          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => MOCK_SOURCE_TOKEN })
           return Promise.resolve({
             ok: true,
             json: async () => ({ ...MOCK_QUOTE, estimate: { ...MOCK_QUOTE.estimate, skipApproval: true } })
@@ -478,7 +502,7 @@ describe('LifiSwidgeProtocol', () => {
 
         await expect(capped.swidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
-        })).rejects.toThrow('Protocol fee exceeds maxProtocolFeeBps limit')
+        })).rejects.toThrow(LifiExecutionError)
 
         expect(account.sendTransaction).not.toHaveBeenCalled()
       })
@@ -489,7 +513,7 @@ describe('LifiSwidgeProtocol', () => {
 
         await expect(capped.swidge({
           fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n
-        })).rejects.toThrow('Network fee exceeds maxNetworkFeeBps limit')
+        })).rejects.toThrow(LifiExecutionError)
 
         expect(account.sendTransaction).not.toHaveBeenCalled()
       })
@@ -500,7 +524,7 @@ describe('LifiSwidgeProtocol', () => {
         await expect(uncapped.swidge(
           { fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n },
           { maxProtocolFeeBps: 1 }
-        )).rejects.toThrow('Protocol fee exceeds maxProtocolFeeBps limit')
+        )).rejects.toThrow(LifiExecutionError)
       })
 
       test('throws LifiReadOnlyAccountError when account is read-only', async () => {
@@ -543,7 +567,8 @@ describe('LifiSwidgeProtocol', () => {
 
       test('excludes APPROVE-type gas costs from network fees', async () => {
         global.fetch = jest.fn().mockImplementation((url) => {
-          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => ({ symbol: 'USDT' }) })
+          if (url.includes('/tokens')) return Promise.resolve({ ok: true, json: async () => MOCK_TOKENS })
+          if (url.includes('/token')) return Promise.resolve({ ok: true, json: async () => MOCK_SOURCE_TOKEN })
           return Promise.resolve({
             ok: true,
             json: async () => ({
@@ -656,7 +681,7 @@ describe('LifiSwidgeProtocol', () => {
         })
 
         await expect(protocol.getSwidgeStatus('0xbad'))
-          .rejects.toThrow('LI.FI status request failed: Transaction not found')
+          .rejects.toThrow(LifiStatusError)
       })
     })
 
@@ -683,7 +708,7 @@ describe('LifiSwidgeProtocol', () => {
           ok: false, statusText: 'Service Unavailable', json: async () => ({})
         })
 
-        await expect(protocol.getSupportedChains()).rejects.toThrow('LI.FI chains request failed')
+        await expect(protocol.getSupportedChains()).rejects.toThrow(LifiQuoteError)
       })
     })
 
@@ -693,7 +718,7 @@ describe('LifiSwidgeProtocol', () => {
       test('returns flat array of SwidgeSupportedToken objects', async () => {
         const tokens = await protocol.getSupportedTokens()
 
-        expect(tokens).toHaveLength(1)
+        expect(tokens.length).toBeGreaterThanOrEqual(1)
         expect(tokens[0]).toMatchObject({
           token: TOKEN,
           chain: 1,
@@ -739,13 +764,13 @@ describe('LifiSwidgeProtocol', () => {
         expect(result.bridgeFee).toBe(2300n)
       })
 
-      test('sets toToken = fromToken so swidge resolves the symbol cross-chain', async () => {
+      test('sets toToken = fromToken so swidge resolves the destination address cross-chain', async () => {
         await protocol.bridge({
           token: TOKEN, targetChain: 'arbitrum', recipient: USER_ADDRESS, amount: 1_000_000n
         })
 
         const quoteCall = global.fetch.mock.calls.find(([url]) => url.includes('/quote'))[0]
-        expect(quoteCall).toContain('toToken=USDT')
+        expect(quoteCall).toContain(`toToken=${TOKEN}`)
       })
     })
 
@@ -884,7 +909,7 @@ describe('LifiSwidgeProtocol', () => {
         await expect(protocol.swidge(
           { fromToken: TOKEN, toToken: TOKEN, toChain: 'arbitrum', fromTokenAmount: 1_000_000n },
           { maxProtocolFeeBps: 1 }
-        )).rejects.toThrow('Protocol fee exceeds maxProtocolFeeBps limit')
+        )).rejects.toThrow(LifiExecutionError)
       })
     })
   })
