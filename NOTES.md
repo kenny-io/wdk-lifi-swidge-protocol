@@ -170,4 +170,4 @@ The built-in allowlist (`LIFI_DIAMOND_ADDRESSES` in `lifi-config.js`) holds the 
 
 **Chain coverage:** The `CHAINS` map in `lifi-config.js` covers 66 chains and exists for ergonomics (`'arbitrum'` over `42161`). It is not a gate — passing a raw numeric `toChain` bypasses the map entirely and works for any chain LI.FI supports, including ones added after this release. `getSupportedChains()` returns the live list directly from LI.FI.
 
-**Bare runtime:** The `bare.js` entry point imports `bare-node-runtime` to polyfill the global environment. The module uses no Node.js-specific APIs (`http.request`, `Buffer`, `crypto.randomBytes`, etc.).
+**Bare runtime:** The `bare.js` entry point imports `bare-node-runtime` to polyfill the global environment. The module uses no Node.js-specific APIs (`http.request`, `Buffer`, `crypto.randomBytes`, etc.)
