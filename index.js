@@ -16,10 +16,6 @@
 
 export { default, default as LifiSwidgeProtocol } from './src/lifi-swidge-protocol.js'
 
-/** @typedef {import('./src/lifi-swidge-protocol.js').LifiSwidgeProtocolConfig} LifiSwidgeProtocolConfig */
-/** @typedef {import('./src/lifi-swidge-protocol.js').LifiRouteOrder} LifiRouteOrder */
-/** @typedef {import('./src/lifi-swidge-protocol.js').SwidgeStatusOptions} SwidgeStatusOptions */
-
 export {
   LifiProtocolError,
   LifiConfigurationError,
@@ -35,3 +31,7 @@ export {
   LifiValidationError,
   LifiUntrustedContractError
 } from './src/errors.js'
+
+// Re-export account classes whose types appear in this module's public API.
+export { WalletAccountEvm, WalletAccountReadOnlyEvm } from '@tetherto/wdk-wallet-evm'
+export { WalletAccountEvmErc4337, WalletAccountReadOnlyEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
