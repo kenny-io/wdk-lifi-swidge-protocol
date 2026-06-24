@@ -45,6 +45,7 @@ import {
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletSponsorshipPolicyConfig} EvmErc4337WalletSponsorshipPolicyConfig */
 /** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletNativeCoinsConfig} EvmErc4337WalletNativeCoinsConfig */
 /** @typedef {import('ethers').Eip1193Provider} Eip1193Provider */
+/** @typedef {import('@tetherto/wdk-failover-provider').default} FailoverProvider */
 
 /**
  * Route selection strategy forwarded to the LI.FI quote API.
@@ -66,7 +67,7 @@ import {
  *   If exceeded, `swidge()` throws before sending any transaction.
  * @property {number | bigint} [maxProtocolFeeBps] - Maximum LI.FI protocol fee as basis points of the input amount.
  *   Compared directly in source token units. If exceeded, `swidge()` throws before sending any transaction.
- * @property {string | Eip1193Provider} [provider] - RPC URL string or EIP-1193 provider object.
+ * @property {string | Eip1193Provider | FailoverProvider} [provider] - RPC URL string, EIP-1193 provider, or WDK FailoverProvider instance.
  *   Falls back to `account._config.provider` when omitted.
  * @property {string} [integrator] - LI.FI integrator identifier, sent as the x-lifi-integrator header.
  * @property {string} [apiKey] - LI.FI API key for higher rate limits, sent as x-lifi-api-key. Never expose client-side.
@@ -141,7 +142,9 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     this._provider = providerSource
       ? (typeof providerSource === 'string'
           ? new JsonRpcProvider(providerSource)
-          : new BrowserProvider(providerSource))
+          : typeof providerSource.getNetwork === 'function'
+            ? providerSource
+            : new BrowserProvider(providerSource))
       : undefined
   }
 
@@ -382,7 +385,12 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
-  /** @private */
+  /**
+   * Returns the numeric chain ID of the bound provider, caching after the first call.
+   *
+   * @private
+   * @returns {Promise<number>}
+   */
   async _getChainId () {
     if (!this._chainId) {
       const network = await this._provider.getNetwork()
@@ -391,9 +399,16 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return this._chainId
   }
 
-  // Resolves a WDK chain name or numeric ID to a LI.FI chain ID.
-  // Returns fromChainId when toChain is undefined (same-chain swap).
-  /** @private */
+  /**
+   * Resolves a WDK chain name or numeric ID to a LI.FI chain ID.
+   * Returns `fromChainId` when `toChain` is undefined (same-chain swap).
+   *
+   * @private
+   * @param {string | number | undefined} toChain
+   * @param {number} fromChainId
+   * @returns {number}
+   * @throws {LifiUnsupportedChainError} If `toChain` is a string not in the supported chains map.
+   */
   _resolveChainId (toChain, fromChainId) {
     if (toChain === undefined || toChain === null) return fromChainId
     if (typeof toChain === 'number') return toChain
@@ -402,10 +417,18 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return id
   }
 
-  // When fromToken and toToken are the same contract address across different
-  // chains (the standard bridge case), resolves the destination-chain contract
-  // address, since token addresses are not portable across chains.
-  /** @private */
+  /**
+   * When `fromToken` and `toToken` are the same contract address across different chains
+   * (the standard bridge case), resolves the destination-chain contract address, since
+   * token addresses are not portable across chains.
+   *
+   * @private
+   * @param {string} fromToken
+   * @param {string} toToken
+   * @param {number} fromChainId
+   * @param {number} toChainId
+   * @returns {Promise<string>} Resolved destination token address.
+   */
   async _resolveToToken (fromToken, toToken, fromChainId, toChainId) {
     if (fromToken === toToken && fromChainId !== toChainId) {
       const dest = await this._resolveCrossChainToToken(fromChainId, toChainId, fromToken)
@@ -414,16 +437,31 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return toToken
   }
 
-  // Finds the destination-chain token matching a cross-chain bridge source token.
-  // LI.FI symbols are not always portable (e.g. Ethereum USDT → Arbitrum USDT0).
-  /** @private */
+  /**
+   * Finds the destination-chain token matching a cross-chain bridge source token.
+   * LI.FI symbols are not always portable (e.g. Ethereum USDT → Arbitrum USDT0).
+   *
+   * @private
+   * @param {number} fromChainId
+   * @param {number} toChainId
+   * @param {string} fromTokenAddress
+   * @returns {Promise<object>} Destination token descriptor from the LI.FI tokens API.
+   */
   async _resolveCrossChainToToken (fromChainId, toChainId, fromTokenAddress) {
     const source = await this._fetchTokenInfo(fromChainId, fromTokenAddress)
     const dest = await this._findDestinationToken(toChainId, source)
     return dest
   }
 
-  /** @private */
+  /**
+   * Fetches full token metadata from the LI.FI `/token` endpoint.
+   *
+   * @private
+   * @param {number} chainId
+   * @param {string} tokenAddress
+   * @returns {Promise<object>} Token descriptor including symbol, decimals, coinKey, priceUSD.
+   * @throws {LifiQuoteError} If the token cannot be resolved or the API returns no symbol.
+   */
   async _fetchTokenInfo (chainId, tokenAddress) {
     const params = new URLSearchParams({ chain: String(chainId), token: tokenAddress })
 
@@ -443,9 +481,16 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return token
   }
 
-  // Searches the destination chain for a stablecoin with matching decimals,
-  // scoring candidates by market cap and coinKey/symbol affinity.
-  /** @private */
+  /**
+   * Searches the destination chain for a stablecoin with matching decimals,
+   * scoring candidates by market cap and coinKey/symbol affinity.
+   *
+   * @private
+   * @param {number} toChainId
+   * @param {object} source - Source token descriptor (symbol, coinKey, decimals).
+   * @returns {Promise<object>} Best-matching destination token descriptor.
+   * @throws {LifiQuoteError} If no matching token is found on the destination chain.
+   */
   async _findDestinationToken (toChainId, source) {
     const searchTerms = [source.symbol]
     if (source.coinKey && source.coinKey !== source.symbol) searchTerms.push(source.coinKey)
@@ -476,7 +521,15 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return matches[0]
   }
 
-  /** @private */
+  /**
+   * Returns true if `token` is a valid destination candidate for `source` —
+   * same decimals and either tagged stablecoin or priced within 5% of $1.
+   *
+   * @private
+   * @param {object} token
+   * @param {object} source
+   * @returns {boolean}
+   */
   _isDestinationTokenCandidate (token, source) {
     if (token.decimals !== source.decimals) return false
     if ((token.tags || []).includes('stablecoin')) return true
@@ -484,7 +537,15 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return Number.isFinite(price) && price >= 0.95 && price <= 1.05
   }
 
-  /** @private */
+  /**
+   * Scores a destination token candidate. Higher is better.
+   * Boosts tokens whose coinKey or symbol matches the source (with USDT0-style suffix handling).
+   *
+   * @private
+   * @param {object} token
+   * @param {object} source
+   * @returns {number}
+   */
   _scoreDestinationToken (token, source) {
     let score = (token.marketCapUSD || 0) + (token.relevance || 0)
     if (token.coinKey === source.coinKey) score += 1e15
@@ -492,7 +553,14 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return score
   }
 
-  /** @private */
+  /**
+   * Searches the LI.FI `/tokens` endpoint for tokens matching `search` on `chainId`.
+   *
+   * @private
+   * @param {number} chainId
+   * @param {string} search - Symbol or partial name to search for.
+   * @returns {Promise<object[]>} Array of token descriptors.
+   */
   async _searchTokens (chainId, search) {
     const params = new URLSearchParams({
       chains: String(chainId),
@@ -507,7 +575,23 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return data.tokens?.[String(chainId)] ?? []
   }
 
-  /** @private */
+  /**
+   * Fetches a quote from the LI.FI `/quote` endpoint with all route parameters.
+   *
+   * @private
+   * @param {object} params
+   * @param {number} params.fromChainId
+   * @param {number} params.toChainId
+   * @param {string} params.fromToken
+   * @param {string} params.toToken
+   * @param {bigint} [params.fromAmount]
+   * @param {bigint} [params.toAmount]
+   * @param {string} [params.fromAddress]
+   * @param {string} [params.toAddress]
+   * @param {number} [params.slippage]
+   * @returns {Promise<object>} Raw LI.FI quote object.
+   * @throws {LifiQuoteError} If LI.FI cannot produce a route or the API request fails.
+   */
   async _fetchQuote ({ fromChainId, toChainId, fromToken, toToken, fromAmount, toAmount, fromAddress, toAddress, slippage }) {
     const params = new URLSearchParams({
       fromChain: String(fromChainId),
@@ -533,10 +617,15 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     })
   }
 
-  // Maps LI.FI gasCosts and feeCosts to the SwidgeFee[] format:
-  // - gasCosts (SEND type) → type: 'network'  (gas/relayer costs, denominated in native token)
-  // - feeCosts             → type: 'protocol' (LI.FI's own fee, denominated in source token)
-  /** @private */
+  /**
+   * Maps LI.FI `gasCosts` and `feeCosts` to the `SwidgeFee[]` format:
+   * - `gasCosts` (SEND type) → `type: 'network'` (gas/relayer costs, denominated in native token)
+   * - `feeCosts`             → `type: 'protocol'` (LI.FI's own fee, denominated in source token)
+   *
+   * @private
+   * @param {object} quote - Raw LI.FI quote object.
+   * @returns {import('@tetherto/wdk-wallet/protocols').SwidgeQuote['fees']}
+   */
   _buildFees (quote) {
     const fees = []
     const fromChainId = quote.action?.fromChainId
@@ -566,10 +655,16 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return fees
   }
 
-  // Enforces maxNetworkFeeBps and maxProtocolFeeBps. Protocol fees compare in
-  // source token units (same denomination as fromAmount); network fees compare
-  // via USD since they are denominated in native token.
-  /** @private */
+  /**
+   * Enforces `maxNetworkFeeBps` and `maxProtocolFeeBps`. Protocol fees compare in
+   * source token units (same denomination as `fromAmount`); network fees compare
+   * via USD since they are denominated in native token.
+   *
+   * @private
+   * @param {object} quote - Raw LI.FI quote object.
+   * @param {Pick<LifiSwidgeProtocolConfig, 'maxNetworkFeeBps' | 'maxProtocolFeeBps'>} effectiveConfig
+   * @throws {LifiExecutionError} If either fee cap is exceeded.
+   */
   _checkFeeCaps (quote, effectiveConfig) {
     const { maxProtocolFeeBps, maxNetworkFeeBps } = effectiveConfig || {}
     if (maxProtocolFeeBps === undefined && maxNetworkFeeBps === undefined) return
@@ -601,7 +696,13 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     }
   }
 
-  /** @private */
+  /**
+   * Extracts the bridge transaction object from a raw LI.FI quote.
+   *
+   * @private
+   * @param {object} quote - Raw LI.FI quote object.
+   * @returns {{ to: string, data: string, value: bigint, gasLimit: bigint }}
+   */
   _buildBridgeTx (quote) {
     const { transactionRequest } = quote
     return {
@@ -612,10 +713,20 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     }
   }
 
-  // Handles ERC-20 approval for the LI.FI Diamond contract. Grants the exact
-  // minimum required amount; for tokens that revert on direct non-zero-to-non-zero
-  // approval (e.g. USDT on Ethereum), resets the allowance to zero first.
-  /** @private */
+  /**
+   * Handles ERC-20 approval for the LI.FI Diamond contract. Grants the exact minimum required
+   * amount. For tokens that revert on non-zero-to-non-zero approval (e.g. USDT on Ethereum),
+   * resets the allowance to zero first.
+   *
+   * @private
+   * @param {string} token - ERC-20 token address.
+   * @param {string} fromAddress - Wallet address granting the allowance.
+   * @param {string} approvalAddress - Spender address (LI.FI Diamond or Permit2).
+   * @param {bigint} amount - Exact allowance to grant.
+   * @param {boolean} skipApproval - When true, skips the approval entirely (native token routes).
+   * @param {object} [config] - ERC-4337 per-call config forwarded to `sendTransaction`.
+   * @returns {Promise<{ approveHash?: string, resetAllowanceHash?: string }>}
+   */
   async _handleApproval (token, fromAddress, approvalAddress, amount, skipApproval, config) {
     if (skipApproval) return {}
 
@@ -653,8 +764,15 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return { approveHash: result.hash, resetAllowanceHash }
   }
 
-  // Maps LI.FI's status/substatus pair to one of the nine canonical SwidgeStatus values.
-  /** @private */
+  /**
+   * Maps LI.FI's `status`/`substatus` pair to one of the nine canonical `SwidgeStatus` values.
+   *
+   * @private
+   * @param {string} status - LI.FI top-level status (PENDING, DONE, FAILED).
+   * @param {string} [substatus] - LI.FI substatus (COMPLETED, PARTIAL, REFUNDED, etc.).
+   * @param {object[]} [requiredActions] - Non-empty when user action is needed (e.g. unlock).
+   * @returns {import('@tetherto/wdk-wallet/protocols').SwidgeStatusResult['status']}
+   */
   _mapLifiStatus (status, substatus, requiredActions) {
     if (requiredActions && requiredActions.length > 0) return 'action-required'
 
@@ -673,10 +791,14 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     }
   }
 
-  // Uses prototype-chain name matching instead of instanceof so the check is immune
-  // to module identity issues when the same package is installed in multiple
-  // node_modules trees.
-  /** @private */
+  /**
+   * Returns true if the bound account is a `WalletAccountEvmErc4337` instance.
+   * Uses prototype-chain name matching instead of `instanceof` to stay immune to
+   * module identity issues when the same package is installed in multiple node_modules trees.
+   *
+   * @private
+   * @returns {boolean}
+   */
   _isErc4337Account () {
     let proto = this._account
     while (proto && proto !== Object.prototype) {
@@ -686,7 +808,13 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return false
   }
 
-  /** @private */
+  /**
+   * Returns true if the bound account is a writable EOA or ERC-4337 account
+   * (i.e. `WalletAccountEvm` or `WalletAccountEvmErc4337`).
+   *
+   * @private
+   * @returns {boolean}
+   */
   _isWritableAccount () {
     if (!this._account) return false
     let proto = this._account
@@ -698,10 +826,17 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     return false
   }
 
-  // Issues a request to the LI.FI API through the central reliability layer:
-  // per-attempt timeout, retries with backoff on transient failures, and typed
-  // error classification. See src/request.js.
-  /** @private */
+  /**
+   * Issues a request to the LI.FI API through the central reliability layer:
+   * per-attempt timeout, retries with exponential backoff on transient failures,
+   * and typed error classification. See `src/request.js`.
+   *
+   * @private
+   * @param {string} path - API path (e.g. '/quote').
+   * @param {URLSearchParams} params - Query parameters.
+   * @param {{ errorClass?: typeof Error, errorPrefix?: string, errorSuffix?: string }} [options]
+   * @returns {Promise<unknown>}
+   */
   async _request (path, params, { errorClass, errorPrefix, errorSuffix } = {}) {
     return request(`${LIFI_API_URL}${path}?${params}`, {
       headers: this._buildHeaders(),
@@ -714,7 +849,12 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     })
   }
 
-  /** @private */
+  /**
+   * Builds LI.FI-specific request headers from config (integrator ID and API key).
+   *
+   * @private
+   * @returns {Record<string, string>}
+   */
   _buildHeaders () {
     const headers = {}
     if (this._config.integrator) headers['x-lifi-integrator'] = this._config.integrator

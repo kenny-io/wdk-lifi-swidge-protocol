@@ -20,27 +20,13 @@
   },
   "main": "index.js",
   "type": "module",
-  "files": [
-    "src/",
-    "examples/",
-    "types/",
-    "index.js",
-    "bare.js",
-    "CHANGELOG.md",
-    "LICENSE",
-    "README.md",
-    "SECURITY.md",
-    ".env.example"
-  ],
   "scripts": {
     "lint": "standard",
     "lint:fix": "standard --fix",
     "build:types": "tsc",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --testTimeout=120000",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage --testPathIgnorePatterns=tests/integration",
-    "example:discover": "node examples/discover-chains-and-tokens.js",
-    "example:swap": "node -r dotenv/config examples/swap-usdt-to-usdc.js",
-    "example:bridge": "node -r dotenv/config examples/bridge-usdt.js"
+    "example:discover": "node examples/discover-chains-and-tokens.js"
   },
   "dependencies": {
     "@tetherto/wdk-wallet": "1.0.0-beta.11",
@@ -51,16 +37,19 @@
   },
   "peerDependencies": {
     "@tetherto/wdk-wallet-evm": ">=1.0.0-beta.8",
-    "@tetherto/wdk-wallet-evm-erc-4337": ">=1.0.0-beta.5"
+    "@tetherto/wdk-wallet-evm-erc-4337": ">=1.0.0-beta.5",
+    "@tetherto/wdk-failover-provider": ">=1.0.0-beta.1"
   },
   "peerDependenciesMeta": {
     "@tetherto/wdk-wallet-evm-erc-4337": {
+      "optional": true
+    },
+    "@tetherto/wdk-failover-provider": {
       "optional": true
     }
   },
   "devDependencies": {
     "cross-env": "10.0.0",
-    "dotenv": "^16.4.7",
     "jest": "30.0.5",
     "standard": "17.1.2",
     "typescript": "^6.0.3"

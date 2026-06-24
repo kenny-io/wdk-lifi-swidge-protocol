@@ -1,0 +1,14 @@
+# Tests
+tests/
+
+# Examples (reference only — not part of the published API)
+examples/
+
+# Additional documentation
+NOTES.md
+CHANGELOG.md
+SECURITY.md
+
+# Dev and environment files
+.env*
+.github/

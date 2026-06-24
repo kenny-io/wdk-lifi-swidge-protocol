@@ -15,12 +15,9 @@
 /**
  * Example: bridge 10 USDT from Ethereum to Arbitrum using LI.FI.
  *
- * Run with:
- *   cp .env.example .env   # fill in your values
- *   node examples/bridge-usdt.js
+ * Replace the placeholder values below with your own before running.
  */
 
-import 'dotenv/config'
 import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
 import { LifiSwidgeProtocol } from '@kenny_io/wdk-protocol-swidge-lifi'
 
@@ -29,8 +26,8 @@ const USDT_ETHEREUM = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
 // contract automatically (Ethereum USDT → Arbitrum USDT0).
 const AMOUNT = 10_000_000n // 10 USDT at 6 decimals
 
-const account = new WalletAccountEvm(process.env.SEED_PHRASE, "0'/0/0", {
-  provider: process.env.RPC_URL // e.g. https://mainnet.infura.io/v3/YOUR_KEY
+const account = new WalletAccountEvm('your mnemonic phrase here', "0'/0/0", {
+  provider: 'https://mainnet.infura.io/v3/YOUR_KEY'
 })
 
 const protocol = new LifiSwidgeProtocol(account, {
@@ -56,34 +53,34 @@ for (const fee of quote.fees) {
   console.log(`    [${fee.type}] ${fee.amount} ${fee.token} — ${fee.description || ''}`)
 }
 
-// 2. Execute (uncomment when ready)
-// const result = await protocol.swidge({
-//   fromToken: USDT_ETHEREUM,
-//   toToken: USDT_ETHEREUM,
-//   toChain: 'arbitrum',
-//   fromTokenAmount: AMOUNT
-// })
-//
-// console.log('\nExecuted:')
-// console.log(`  Bridge tx: ${result.hash}`)
-// console.log(`  Track at: https://scan.li.fi/tx/${result.id}`)
-//
-// // 3. Poll status until terminal.
-// // NOT_FOUND means the tx is not indexed yet — keep polling. Other status API
-// // errors are tolerated up to a small budget (transient 5xx/429 are already
-// // retried inside getSwidgeStatus).
-// const TERMINAL = ['completed', 'failed', 'refunded', 'partial', 'cancelled', 'expired']
-// let status
-// let errorBudget = 3
-// do {
-//   await new Promise(resolve => setTimeout(resolve, 10_000))
-//   try {
-//     ;({ status } = await protocol.getSwidgeStatus(result.id, { fromChain: 1, toChain: 42161 }))
-//     errorBudget = 3
-//     console.log(`  Status: ${status}`)
-//   } catch (err) {
-//     if (err.lifiStatus === 'NOT_FOUND') continue // not indexed yet
-//     if (--errorBudget === 0) throw err
-//     console.log(`  Status check failed (${err.message}), retrying…`)
-//   }
-// } while (!TERMINAL.includes(status))
+// 2. Execute
+const result = await protocol.swidge({
+  fromToken: USDT_ETHEREUM,
+  toToken: USDT_ETHEREUM,
+  toChain: 'arbitrum',
+  fromTokenAmount: AMOUNT
+})
+
+console.log('\nExecuted:')
+console.log(`  Bridge tx: ${result.hash}`)
+console.log(`  Track at: https://scan.li.fi/tx/${result.id}`)
+
+// 3. Poll status until terminal.
+// NOT_FOUND means the tx is not indexed yet — keep polling. Other status API
+// errors are tolerated up to a small budget (transient 5xx/429 are already
+// retried inside getSwidgeStatus).
+const TERMINAL = ['completed', 'failed', 'refunded', 'partial', 'cancelled', 'expired']
+let status
+let errorBudget = 3
+do {
+  await new Promise(resolve => setTimeout(resolve, 10_000))
+  try {
+    ;({ status } = await protocol.getSwidgeStatus(result.id, { fromChain: 1, toChain: 42161 }))
+    errorBudget = 3
+    console.log(`  Status: ${status}`)
+  } catch (err) {
+    if (err.lifiStatus === 'NOT_FOUND') continue // not indexed yet
+    if (--errorBudget === 0) throw err
+    console.log(`  Status check failed (${err.message}), retrying…`)
+  }
+} while (!TERMINAL.includes(status))

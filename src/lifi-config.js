@@ -14,23 +14,54 @@
 
 'use strict'
 
+/**
+ * Base URL for all LI.FI REST API calls.
+ *
+ * @readonly
+ * @type {string}
+ */
 export const LIFI_API_URL = 'https://li.quest/v1'
 
 // HTTP reliability defaults, modeled on the LI.FI SDK (packages/sdk/src/utils/request.ts).
 
-/** Default timeout in ms per HTTP attempt. */
+/**
+ * Default timeout in ms per HTTP attempt.
+ *
+ * @readonly
+ * @type {number}
+ */
 export const DEFAULT_TIMEOUT = 30_000
 
-/** Default extra attempts on transient failures; mirrors the LI.FI SDK's requestSettings.retries. */
+/**
+ * Default extra attempts on transient failures; mirrors the LI.FI SDK's requestSettings.retries.
+ *
+ * @readonly
+ * @type {number}
+ */
 export const DEFAULT_RETRIES = 1
 
-/** Default base backoff in ms, doubled per attempt. */
+/**
+ * Default base backoff in ms, doubled per attempt.
+ *
+ * @readonly
+ * @type {number}
+ */
 export const DEFAULT_RETRY_DELAY = 500
 
-/** Cap in ms on the exponential backoff between retries. */
+/**
+ * Cap in ms on the exponential backoff between retries.
+ *
+ * @readonly
+ * @type {number}
+ */
 export const MAX_RETRY_DELAY = 5_000
 
-/** Cap in ms on honored Retry-After header values. */
+/**
+ * Cap in ms on honored Retry-After header values.
+ *
+ * @readonly
+ * @type {number}
+ */
 export const MAX_RETRY_AFTER = 60_000
 
 /**
@@ -38,13 +69,21 @@ export const MAX_RETRY_AFTER = 60_000
  * 'default' is the canonical CREATE2 deployment shared by most EVM chains.
  * Chains where CREATE2 derivation differs get explicit entries.
  * Source: https://github.com/lifinance/contracts/tree/main/deployments
+ *
+ * @readonly
+ * @type {Record<string | number, string>}
  */
 export const LIFI_DIAMOND_ADDRESSES = {
   default: '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae',
   324: '0x341e94069f53234fe6dabef707ad424830525715' // zkSync Era
 }
 
-/** Uniswap Permit2 — appears as estimate.approvalAddress on permit-based routes. */
+/**
+ * Uniswap Permit2 — appears as estimate.approvalAddress on permit-based routes.
+ *
+ * @readonly
+ * @type {string}
+ */
 export const PERMIT2_ADDRESS = '0x000000000022d473030f116ddee9f6b43ac78ba3'
 
 /**
@@ -53,6 +92,9 @@ export const PERMIT2_ADDRESS = '0x000000000022d473030f116ddee9f6b43ac78ba3'
  *
  * This map is not a gate. Pass a raw numeric chain ID as `toChain` to target any chain
  * not listed here. The numeric ID is forwarded directly to the LI.FI quote API.
+ *
+ * @readonly
+ * @type {Record<string, number>}
  */
 export const CHAINS = {
   // Major L1s and L2s

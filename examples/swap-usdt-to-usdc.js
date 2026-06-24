@@ -18,12 +18,9 @@
  * Swidge handles same-chain swaps and cross-chain bridges with one interface.
  * For a same-chain swap, simply omit toChain (or set it equal to the source chain).
  *
- * Run with:
- *   cp .env.example .env   # fill in your values (RPC_URL should point to Arbitrum)
- *   node examples/swap-usdt-to-usdc.js
+ * Replace the placeholder values below with your own before running.
  */
 
-import 'dotenv/config'
 import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
 import { LifiSwidgeProtocol } from '@kenny_io/wdk-protocol-swidge-lifi'
 
@@ -31,8 +28,8 @@ const USDT_ARBITRUM = '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9'
 const USDC_ARBITRUM = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
 const AMOUNT = 10_000_000n // 10 USDT at 6 decimals
 
-const account = new WalletAccountEvm(process.env.SEED_PHRASE, "0'/0/0", {
-  provider: process.env.RPC_URL // e.g. https://arb1.arbitrum.io/rpc
+const account = new WalletAccountEvm('your mnemonic phrase here', "0'/0/0", {
+  provider: 'https://arb1.arbitrum.io/rpc'
 })
 
 const protocol = new LifiSwidgeProtocol(account, {
@@ -57,20 +54,20 @@ for (const fee of quote.fees) {
   console.log(`    [${fee.type}] ${fee.amount} ${fee.token} — ${fee.description || ''}`)
 }
 
-// 2. Execute (uncomment when ready)
-// const result = await protocol.swidge({
-//   fromToken: USDT_ARBITRUM,
-//   toToken: USDC_ARBITRUM,
-//   fromTokenAmount: AMOUNT,
-//   slippage: 0.005
-// })
-//
-// console.log('\nSwap executed:')
-// console.log(`  Tx: ${result.hash}`)
-// console.log(`  Sent:     ${result.fromTokenAmount} USDT base units`)
-// console.log(`  Received: ${result.toTokenAmount} USDC base units`)
-//
-// // Approval tx appears in transactions if it was needed
-// for (const tx of result.transactions.filter(t => t.type === 'approval')) {
-//   console.log(`  Approval: ${tx.hash}`)
-// }
+// 2. Execute
+const result = await protocol.swidge({
+  fromToken: USDT_ARBITRUM,
+  toToken: USDC_ARBITRUM,
+  fromTokenAmount: AMOUNT,
+  slippage: 0.005
+})
+
+console.log('\nSwap executed:')
+console.log(`  Tx: ${result.hash}`)
+console.log(`  Sent:     ${result.fromTokenAmount} USDT base units`)
+console.log(`  Received: ${result.toTokenAmount} USDC base units`)
+
+// Approval tx appears in transactions if it was needed
+for (const tx of result.transactions.filter(t => t.type === 'approval')) {
+  console.log(`  Approval: ${tx.hash}`)
+}
