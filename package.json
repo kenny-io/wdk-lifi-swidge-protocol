@@ -25,7 +25,9 @@
     "lint:fix": "standard --fix",
     "build:types": "tsc",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --testTimeout=120000",
-    "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage --testPathIgnorePatterns=tests/integration",
+    "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --testTimeout=120000",
+    "test:integration:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --coverage --testTimeout=120000",
     "example:discover": "node examples/discover-chains-and-tokens.js"
   },
   "dependencies": {

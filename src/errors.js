@@ -20,7 +20,8 @@ export class LifiProtocolError extends Error {
    * Creates a new LI.FI error.
    *
    * @param {string} message - The error's message.
-   * @param {object} [details] - The error's details.
+   * @param {Object} [details] - The error's details.
+   * @param {unknown} [details.cause] - The error's cause.
    */
   constructor (message, details) {
     super(message, details)

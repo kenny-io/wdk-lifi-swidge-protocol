@@ -80,7 +80,7 @@ async function fetchWithTimeout (url, init, timeout) {
 // across time, preventing thundering-herd when many clients retry in sync.
 function backoffDelay (attempt, baseDelay) {
   const ceiling = Math.min(baseDelay * 2 ** attempt, MAX_RETRY_DELAY)
-  return Math.random() * ceiling
+  return Math.random() + ceiling
 }
 
 // Delay before retrying a 429: honors the Retry-After header (seconds or

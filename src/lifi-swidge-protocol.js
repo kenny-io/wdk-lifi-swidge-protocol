@@ -67,7 +67,7 @@ import {
  *   If exceeded, `swidge()` throws before sending any transaction.
  * @property {number | bigint} [maxProtocolFeeBps] - Maximum LI.FI protocol fee as basis points of the input amount.
  *   Compared directly in source token units. If exceeded, `swidge()` throws before sending any transaction.
- * @property {string | Eip1193Provider | FailoverProvider} [provider] - RPC URL string, EIP-1193 provider, or WDK FailoverProvider instance.
+ * @property {string | Eip1193Provider | Array<string | Eip1193Provider>} [provider] - RPC URL string, EIP-1193 provider, or array of either for automatic failover (requires `@tetherto/wdk-failover-provider`).
  *   Falls back to `account._config.provider` when omitted.
  * @property {string} [integrator] - LI.FI integrator identifier, sent as the x-lifi-integrator header.
  * @property {string} [apiKey] - LI.FI API key for higher rate limits, sent as x-lifi-api-key. Never expose client-side.
@@ -139,13 +139,14 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
     const providerSource = config.provider ?? account?._config?.provider
 
     /** @private */
-    this._provider = providerSource
-      ? (typeof providerSource === 'string'
-          ? new JsonRpcProvider(providerSource)
-          : typeof providerSource.getNetwork === 'function'
-            ? providerSource
-            : new BrowserProvider(providerSource))
-      : undefined
+    this._providerSources = Array.isArray(providerSource) ? providerSource : null
+
+    /** @private */
+    this._provider = !providerSource || Array.isArray(providerSource)
+      ? undefined
+      : typeof providerSource === 'string'
+        ? new JsonRpcProvider(providerSource)
+        : new BrowserProvider(providerSource)
   }
 
   /**
@@ -159,7 +160,7 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
    * @throws {LifiQuoteError} If LI.FI cannot produce a route or the quote API request fails.
    */
   async quoteSwidge (options) {
-    if (!this._provider) {
+    if (!(await this._getProvider())) {
       throw new LifiConfigurationError(
         'A connected provider is required to fetch quotes. ' +
         'Pass a provider URL in account config or in the LifiSwidgeProtocolConfig.'
@@ -221,7 +222,7 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
       )
     }
 
-    if (!this._provider) {
+    if (!(await this._getProvider())) {
       throw new LifiConfigurationError(
         'A connected provider is required to execute operations. ' +
         'Pass a provider URL in account config or in the LifiSwidgeProtocolConfig.'
@@ -386,6 +387,27 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
+   * Returns the bound provider, building a `FailoverProvider` from `_providerSources` on first call
+   * when an array of URLs/providers was supplied. Requires `@tetherto/wdk-failover-provider` to be
+   * installed when using the array form.
+   *
+   * @private
+   * @returns {Promise<import('ethers').Provider | undefined>}
+   */
+  async _getProvider () {
+    if (this._provider) return this._provider
+    if (!this._providerSources) return undefined
+
+    const { default: FailoverProvider } = await import('@tetherto/wdk-failover-provider')
+    const fp = new FailoverProvider()
+    for (const src of this._providerSources) {
+      fp.addProvider(typeof src === 'string' ? new JsonRpcProvider(src) : new BrowserProvider(src))
+    }
+    this._provider = fp.initialize()
+    return this._provider
+  }
+
+  /**
    * Returns the numeric chain ID of the bound provider, caching after the first call.
    *
    * @private
@@ -393,7 +415,7 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
    */
   async _getChainId () {
     if (!this._chainId) {
-      const network = await this._provider.getNetwork()
+      const network = await (await this._getProvider()).getNetwork()
       this._chainId = Number(network.chainId)
     }
     return this._chainId
@@ -730,7 +752,8 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
   async _handleApproval (token, fromAddress, approvalAddress, amount, skipApproval, config) {
     if (skipApproval) return {}
 
-    const tokenContract = new Contract(token, ERC20_ABI, this._provider)
+    const provider = await this._getProvider()
+    const tokenContract = new Contract(token, ERC20_ABI, provider)
     const currentAllowance = await tokenContract.allowance(fromAddress, approvalAddress)
 
     if (currentAllowance >= amount) return {}
@@ -746,7 +769,7 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
         ? await this._account.sendTransaction([resetTx], config)
         : await this._account.sendTransaction(resetTx)
       resetAllowanceHash = result.hash
-      if (!this._isErc4337Account()) await this._provider.waitForTransaction(resetAllowanceHash)
+      if (!this._isErc4337Account()) await provider.waitForTransaction(resetAllowanceHash)
     }
 
     const approveTx = {
@@ -759,7 +782,7 @@ export default class LifiSwidgeProtocol extends SwidgeProtocol {
 
     // Wait for confirmation before the bridge tx — without this the LI.FI Diamond's
     // transferFrom arrives before the allowance is on-chain, causing TransferFromFailed().
-    if (!this._isErc4337Account()) await this._provider.waitForTransaction(result.hash)
+    if (!this._isErc4337Account()) await provider.waitForTransaction(result.hash)
 
     return { approveHash: result.hash, resetAllowanceHash }
   }
