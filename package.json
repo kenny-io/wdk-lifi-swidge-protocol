@@ -1,0 +1,79 @@
+{
+  "name": "@kenny_io/wdk-protocol-swidge-lifi",
+  "version": "0.2.1",
+  "description": "WDK Swidge module for LI.FI — lets any WDK wallet account swap and bridge tokens via LI.FI using the ISwidgeProtocol interface.",
+  "keywords": [
+    "wdk",
+    "protocol",
+    "swidge",
+    "swap",
+    "bridge",
+    "lifi",
+    "evm",
+    "erc-4337"
+  ],
+  "author": "LI.FI",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kenny-io/wdk-lifi-swidge-protocol.git"
+  },
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "lint": "standard",
+    "lint:fix": "standard --fix",
+    "build:types": "tsc",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --testTimeout=120000",
+    "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --testTimeout=120000",
+    "test:integration:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --coverage --testTimeout=120000",
+    "example:discover": "node examples/discover-chains-and-tokens.js"
+  },
+  "dependencies": {
+    "@tetherto/wdk-wallet": "1.0.0-beta.11",
+    "@tetherto/wdk-wallet-evm": "1.0.0-beta.8",
+    "@tetherto/wdk-wallet-evm-erc-4337": "1.0.0-beta.5",
+    "bare-node-runtime": "^1.1.4",
+    "ethers": "6.13.5"
+  },
+  "peerDependencies": {
+    "@tetherto/wdk-wallet-evm": ">=1.0.0-beta.8",
+    "@tetherto/wdk-wallet-evm-erc-4337": ">=1.0.0-beta.5",
+    "@tetherto/wdk-failover-provider": ">=1.0.0-beta.1"
+  },
+  "peerDependenciesMeta": {
+    "@tetherto/wdk-wallet-evm-erc-4337": {
+      "optional": true
+    },
+    "@tetherto/wdk-failover-provider": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "cross-env": "10.0.0",
+    "jest": "30.0.5",
+    "standard": "17.1.2",
+    "typescript": "^6.0.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "bare": "./bare.js",
+      "default": "./index.js"
+    },
+    "./package": {
+      "default": "./package.json"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "standard": {
+    "ignore": [
+      "bare.js",
+      "tests/**/*.js"
+    ]
+  }
+}

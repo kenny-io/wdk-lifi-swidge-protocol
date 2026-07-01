@@ -1,0 +1,52 @@
+// Copyright 2025 LI.FI
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+'use strict'
+
+export { default, default as LifiSwidgeProtocol } from './src/lifi-swidge-protocol.js'
+
+export {
+  LifiProtocolError,
+  LifiConfigurationError,
+  LifiQuoteError,
+  LifiExecutionError,
+  LifiStatusError,
+  LifiReadOnlyAccountError,
+  LifiUnsupportedChainError,
+  LifiTimeoutError,
+  LifiNetworkError,
+  LifiRateLimitError,
+  LifiSlippageError,
+  LifiValidationError,
+  LifiUntrustedContractError
+} from './src/errors.js'
+
+// Re-export account classes whose types appear in this module's public API.
+export { WalletAccountEvm, WalletAccountReadOnlyEvm } from '@tetherto/wdk-wallet-evm'
+export { WalletAccountEvmErc4337, WalletAccountReadOnlyEvmErc4337 } from '@tetherto/wdk-wallet-evm-erc-4337'
+
+// JSDoc typedef re-exports for JS consumers.
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeOptions} SwidgeOptions */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeQuote} SwidgeQuote */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeResult} SwidgeResult */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeStatusResult} SwidgeStatusResult */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeSupportedChain} SwidgeSupportedChain */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeSupportedToken} SwidgeSupportedToken */
+/** @typedef {import('@tetherto/wdk-wallet/protocols').SwidgeSupportedTokensOptions} SwidgeSupportedTokensOptions */
+/** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletPaymasterTokenConfig} EvmErc4337WalletPaymasterTokenConfig */
+/** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletSponsorshipPolicyConfig} EvmErc4337WalletSponsorshipPolicyConfig */
+/** @typedef {import('@tetherto/wdk-wallet-evm-erc-4337').EvmErc4337WalletNativeCoinsConfig} EvmErc4337WalletNativeCoinsConfig */
+/** @typedef {import('./src/lifi-swidge-protocol.js').LifiSwidgeProtocolConfig} LifiSwidgeProtocolConfig */
+/** @typedef {import('./src/lifi-swidge-protocol.js').LifiRouteOrder} LifiRouteOrder */
+/** @typedef {import('./src/lifi-swidge-protocol.js').SwidgeStatusOptions} SwidgeStatusOptions */
